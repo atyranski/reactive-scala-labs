@@ -47,7 +47,10 @@ class Checkout extends Actor {
   )
 
   def receive: Receive = LoggingReceive {
-    selectingDelivery(checkoutTimer)
+    case StartCheckout => {
+      println(s"[Info] Starting checkout.")
+      selectingDelivery(checkoutTimer)
+    }
   }
 
   def selectingDelivery(timer: Cancellable): Receive = LoggingReceive {
