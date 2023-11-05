@@ -50,27 +50,27 @@ class CartActor extends Actor {
 
   def nonEmpty(cart: Cart, timer: Cancellable): Receive = LoggingReceive {
     case AddItem(item: Any) => {
-      println(s"[Info] Added item '${item}' to cart. (cart.size == ${cart.size}")
+      log.info(s"Added item '${item}' to cart. (cart.size == ${cart.size}")
       timer.cancel()
       context.become(nonEmpty(cart.addItem(item), scheduleTimer))
     }
     case RemoveItem(item: Any) if cart.size == 1 && cart.contains(item) => {
-      println(s"[Info] Removed item '${item}' from cart. It was the last one.")
+      log.info(s"Removed item '${item}' from cart. It was the last one.")
       timer.cancel()
       context.become(empty)
     }
     case RemoveItem(item: Any) if cart.size > 1 && cart.contains(item) => {
-      println(s"[Info] Removed item '${item}' from cart. (cart.size == ${cart.size}")
+      log.info(s"Removed item '${item}' from cart. (cart.size == ${cart.size}")
       timer.cancel()
       context.become(nonEmpty(cart.removeItem(item), scheduleTimer))
     }
     case ExpireCart => {
-      println(s"[Warning] Your cart was not updated for ${cartTimerDuration} and it expired.")
+      log.warning(s"Your cart was not updated for ${cartTimerDuration} and it expired.")
       timer.cancel()
       context.become(empty)
     }
     case StartCheckout if cart.size > 0 => {
-      println(s"[Info] Starting checkout.")
+      log.info("Starting checkout.")
       timer.cancel()
       context.become(inCheckout(cart))
     }

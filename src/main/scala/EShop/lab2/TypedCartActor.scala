@@ -4,7 +4,6 @@ import akka.actor.Cancellable
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import scala.language.postfixOps
-
 import scala.concurrent.duration._
 
 object TypedCartActor {
@@ -27,14 +26,58 @@ class TypedCartActor {
 
   val cartTimerDuration: FiniteDuration = 5 seconds
 
-  private def scheduleTimer(context: ActorContext[TypedCartActor.Command]): Cancellable = ???
+  private def scheduleTimer(context: ActorContext[TypedCartActor.Command]): Cancellable = context.scheduleOnce(
+    cartTimerDuration, context.self, ExpireCart)
 
-  def start: Behavior[TypedCartActor.Command] = ???
+  def start: Behavior[TypedCartActor.Command] = empty
 
-  def empty: Behavior[TypedCartActor.Command] = ???
+  def empty: Behavior[TypedCartActor.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case AddItem(item: Any) => {
+        nonEmpty(Cart(Seq(item)), scheduleTimer(context))
+      }
+    }
+  )
 
-  def nonEmpty(cart: Cart, timer: Cancellable): Behavior[TypedCartActor.Command] = ???
+  def nonEmpty(cart: Cart, timer: Cancellable): Behavior[TypedCartActor.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case AddItem(item: Any) => {
+        context.log.info(s"Added item '${item}' to cart. (cart.size == ${cart.size}")
+        timer.cancel()
+        nonEmpty(cart.addItem(item), scheduleTimer(context))
+      }
+      case RemoveItem(item: Any) if cart.size == 1 && cart.contains(item) => {
+        context.log.info(s"Removed item '${item}' from cart. It was the last one.")
+        timer.cancel()
+        empty
+      }
+      case RemoveItem(item: Any) if cart.size > 1 && cart.contains(item) => {
+        context.log.info(s"Removed item '${item}' from cart. (cart.size == ${cart.size}")
+        timer.cancel()
+        nonEmpty(cart.removeItem(item), scheduleTimer(context))
+      }
+      case ExpireCart => {
+        context.log.warn(s"Your cart was not updated for ${cartTimerDuration} and it expired.")
+        timer.cancel()
+        empty
+      }
+      case StartCheckout if cart.size > 0 => {
+        context.log.info("Starting checkout.")
+        timer.cancel()
+        inCheckout(cart)
+      }
+    }
+  )
 
-  def inCheckout(cart: Cart): Behavior[TypedCartActor.Command] = ???
+  def inCheckout(cart: Cart): Behavior[TypedCartActor.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case ConfirmCheckoutCancelled => {
+        nonEmpty(cart, scheduleTimer(context))
+      }
+      case ConfirmCheckoutClosed => {
+        empty
+      }
+    }
+  )
 
 }
