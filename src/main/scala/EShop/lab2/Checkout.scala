@@ -38,34 +38,34 @@ class Checkout extends Actor {
   val checkoutTimerDuration: FiniteDuration = 1 seconds
   val paymentTimerDuration: FiniteDuration = 1 seconds
 
-  private def checkoutTimer: Cancellable = context.system.scheduler.scheduleOnce(
+  private def checkoutTimer: Cancellable = scheduler.scheduleOnce(
     checkoutTimerDuration, self, ExpireCheckout
   )
 
-  private def paymentTimer: Cancellable = context.system.scheduler.scheduleOnce(
+  private def paymentTimer: Cancellable = scheduler.scheduleOnce(
     paymentTimerDuration, self, ExpirePayment
   )
 
   def receive: Receive = LoggingReceive {
     case StartCheckout => {
-      println(s"[Info] Starting checkout.")
-      selectingDelivery(checkoutTimer)
+      log.info("Starting checkout.")
+      context.become(selectingDelivery(checkoutTimer))
     }
   }
 
   def selectingDelivery(timer: Cancellable): Receive = LoggingReceive {
     case SelectDeliveryMethod(deliveryMethod: String) => {
-      println(s"[Info] Selected delivery method '${deliveryMethod}'.")
+      log.info(s"Selected delivery method '${deliveryMethod}'.")
       timer.cancel()
       context.become(selectingPaymentMethod(checkoutTimer))
     }
     case CancelCheckout => {
-      println(s"[Info] Checkout cancelled.")
+      log.info("Checkout cancelled.")
       timer.cancel()
       context.become(cancelled)
     }
     case ExpireCheckout => {
-      println(s"[Warning] Your checkout was not updated for ${checkoutTimerDuration} and it expired.")
+      log.warning(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
       timer.cancel()
       context.become(cancelled)
     }
@@ -73,17 +73,17 @@ class Checkout extends Actor {
 
   def selectingPaymentMethod(timer: Cancellable): Receive = LoggingReceive {
     case SelectPayment(paymentMethod: String) => {
-      println(s"[Info] Selected payment method '${paymentMethod}'.")
+      log.info(s"Selected payment method '${paymentMethod}'.")
       timer.cancel()
       context.become(processingPayment(paymentTimer))
     }
     case CancelCheckout => {
-      println(s"[Info] Checkout cancelled.")
+      log.info("Checkout cancelled.")
       timer.cancel()
       context.become(cancelled)
     }
     case ExpireCheckout => {
-      println(s"[Warning] Your checkout was not updated for ${checkoutTimerDuration} and it expired.")
+      log.warning(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
       timer.cancel()
       context.become(cancelled)
     }
@@ -91,17 +91,17 @@ class Checkout extends Actor {
 
   def processingPayment(timer: Cancellable): Receive = LoggingReceive {
     case ConfirmPaymentReceived => {
-      println(s"[Info] Confirmed payment.")
+      log.info("Confirmed payment.")
       timer.cancel()
       context.become(closed)
     }
     case CancelCheckout => {
-      println(s"[Info] Checkout cancelled.")
+      log.info("Checkout cancelled.")
       timer.cancel()
       context.become(cancelled)
     }
-    case ExpireCheckout => {
-      println(s"[Warning] Your checkout was not updated for ${paymentTimerDuration} and it expired.")
+    case ExpirePayment => {
+      log.warning("Your payment wasn't updated for ${paymentTimerDuration} and it expired.")
       timer.cancel()
       context.become(cancelled)
     }

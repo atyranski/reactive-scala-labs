@@ -30,10 +30,11 @@ class CartActor extends Actor {
   import context._
   import CartActor._
 
+  private val scheduler = context.system.scheduler
   private val log       = Logging(context.system, this)
   val cartTimerDuration: FiniteDuration = 5 seconds
 
-  private def scheduleTimer: Cancellable = context.system.scheduler.scheduleOnce(
+  private def scheduleTimer: Cancellable = scheduler.scheduleOnce(
     cartTimerDuration, self, ExpireCart
   )
 
