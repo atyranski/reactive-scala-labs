@@ -17,6 +17,9 @@ object CartActor {
   case object ConfirmCheckoutClosed    extends Command
 
   sealed trait Event
+  case class ItemAdded(id: String)     extends Event
+  case class ItemRemoved(id: String)   extends Event
+
   case class CheckoutStarted(checkoutRef: ActorRef) extends Event
 
   def props = Props(new CartActor())
@@ -24,19 +27,62 @@ object CartActor {
 
 class CartActor extends Actor {
 
+  import context._
   import CartActor._
 
+  private val scheduler = context.system.scheduler
   private val log       = Logging(context.system, this)
-  val cartTimerDuration = 5 seconds
+  val cartTimerDuration: FiniteDuration = 5 seconds
 
-  private def scheduleTimer: Cancellable = ???
+  private def scheduleTimer: Cancellable = scheduler.scheduleOnce(
+    cartTimerDuration, self, ExpireCart
+  )
 
-  def receive: Receive = ???
+  def receive: Receive = LoggingReceive {
+    empty
+  }
 
-  def empty: Receive = ???
+  def empty: Receive = LoggingReceive {
+    case AddItem(item: Any) => {
+      context.become(nonEmpty(Cart.empty.addItem(item), scheduleTimer))
+    }
+  }
 
-  def nonEmpty(cart: Cart, timer: Cancellable): Receive = ???
+  def nonEmpty(cart: Cart, timer: Cancellable): Receive = LoggingReceive {
+    case AddItem(item: Any) => {
+      log.info(s"Added item '${item}' to cart. (cart.size == ${cart.size}")
+      timer.cancel()
+      context.become(nonEmpty(cart.addItem(item), scheduleTimer))
+    }
+    case RemoveItem(item: Any) if cart.size == 1 && cart.contains(item) => {
+      log.info(s"Removed item '${item}' from cart. It was the last one.")
+      timer.cancel()
+      context.become(empty)
+    }
+    case RemoveItem(item: Any) if cart.size > 1 && cart.contains(item) => {
+      log.info(s"Removed item '${item}' from cart. (cart.size == ${cart.size}")
+      timer.cancel()
+      context.become(nonEmpty(cart.removeItem(item), scheduleTimer))
+    }
+    case ExpireCart => {
+      log.warning(s"Your cart was not updated for ${cartTimerDuration} and it expired.")
+      timer.cancel()
+      context.become(empty)
+    }
+    case StartCheckout if cart.size > 0 => {
+      log.info("Starting checkout.")
+      timer.cancel()
+      context.become(inCheckout(cart))
+    }
+  }
 
-  def inCheckout(cart: Cart): Receive = ???
+  def inCheckout(cart: Cart): Receive = LoggingReceive {
+    case ConfirmCheckoutCancelled => {
+      context.become(nonEmpty(cart, scheduleTimer))
+    }
+    case ConfirmCheckoutClosed => {
+      context.become(empty)
+    }
+  }
 
 }
