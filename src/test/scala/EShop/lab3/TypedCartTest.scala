@@ -1,8 +1,7 @@
 package EShop.lab3
 
-import EShop.lab2.{Cart, TypedCartActor, TypedCheckout}
-import akka.actor.testkit.typed.Effect.Spawned
-import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit}
+import EShop.lab2.{Cart, TypedCartActor}
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -47,12 +46,22 @@ class TypedCartTest
 
   it should "start checkout" in {
     val givenItem = "EXAMPLE_ITEM"
-    val cartActor = BehaviorTestKit(new TypedCartActor().start)
-    val orderManagerActor = BehaviorTestKit(new OrderManager().start)
+    val cartActor = testKit.spawn(new TypedCartActor().start)
+    val orderManagerProbe = testKit.createTestProbe[OrderManager.Command]()
 
-    cartActor.run(TypedCartActor.AddItem(givenItem))
-    cartActor.run(TypedCartActor.StartCheckout(orderManagerActor.ref))
+    cartActor ! TypedCartActor.AddItem(givenItem)
+    cartActor ! TypedCartActor.StartCheckout(orderManagerProbe.ref)
 
-    cartActor.expectEffect(Spawned(new TypedCheckout(cartActor.ref).start, "checkoutActor"))
+    orderManagerProbe.expectMessageType[OrderManager.ConfirmCheckoutStarted]
+
+//    val givenItem = "EXAMPLE_ITEM"
+//    val cartActor = BehaviorTestKit(new TypedCartActor().start)
+//    val orderManagerActor = BehaviorTestKit(new OrderManager().start)
+//
+//    cartActor.run(TypedCartActor.AddItem(givenItem))
+//    cartActor.expectEffectType[Scheduled[String]]
+//
+//    cartActor.run(TypedCartActor.StartCheckout(orderManagerActor.ref))
+//    cartActor.expectEffect(Spawned(new TypedCheckout(cartActor.ref).start, "checkoutActor"))
   }
 }

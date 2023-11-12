@@ -61,11 +61,17 @@ class TypedCheckout(
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpireCheckout => {
         context.log.warn(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
@@ -87,11 +93,17 @@ class TypedCheckout(
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpireCheckout => {
         context.log.warn(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
@@ -102,16 +114,25 @@ class TypedCheckout(
       case ConfirmPaymentReceived => {
         context.log.info("Confirmed payment.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutClosed
+
         closed
       }
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpirePayment => {
         context.log.warn("Your payment wasn't updated for ${paymentTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
