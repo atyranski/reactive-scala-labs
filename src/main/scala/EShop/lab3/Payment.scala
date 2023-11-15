@@ -18,6 +18,16 @@ class Payment(
 
   import Payment._
 
-  def start: Behavior[Payment.Command] = ???
+  def start: Behavior[Payment.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case DoPayment => {
+        context.log.info(s"Payment detected with method '${method}'")
+
+        orderManager ! OrderManager.ConfirmPaymentReceived
+        checkout ! TypedCheckout.ConfirmPaymentReceived
+
+        Behaviors.stopped
+      }
+  })
 
 }

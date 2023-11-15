@@ -6,7 +6,7 @@ import akka.actor.typed.{ActorRef, Behavior}
 
 import scala.language.postfixOps
 import scala.concurrent.duration._
-import EShop.lab3.OrderManager
+import EShop.lab3.{OrderManager, Payment}
 
 object TypedCheckout {
 
@@ -45,7 +45,7 @@ class TypedCheckout(
   def start: Behavior[TypedCheckout.Command] = Behaviors.receive(
     (context, message) => message match {
       case StartCheckout => {
-        context.log.info("Starting checkout.")
+        context.log.info("Checkout started.")
         selectingDelivery(checkoutTimer(context))
       }
     }
@@ -61,11 +61,17 @@ class TypedCheckout(
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpireCheckout => {
         context.log.warn(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
@@ -73,19 +79,31 @@ class TypedCheckout(
 
   def selectingPaymentMethod(timer: Cancellable): Behavior[TypedCheckout.Command] = Behaviors.receive(
     (context, message) => message match {
-      case SelectPayment(paymentMethod: String) => {
+      case SelectPayment(paymentMethod: String, orderManagerRef: ActorRef[OrderManager.Command]) => {
         context.log.info(s"Selected payment method '${paymentMethod}'.")
         timer.cancel()
+
+        val payment = context.spawn(
+          new Payment(paymentMethod, orderManagerRef, context.self).start, "paymentActor")
+
+        orderManagerRef ! OrderManager.ConfirmPaymentStarted(payment)
+
         processingPayment(paymentTimer(context))
       }
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpireCheckout => {
         context.log.warn(s"Your checkout wasn't updated for ${checkoutTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
@@ -96,31 +114,32 @@ class TypedCheckout(
       case ConfirmPaymentReceived => {
         context.log.info("Confirmed payment.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutClosed
+
         closed
       }
       case CancelCheckout => {
         context.log.info("Checkout cancelled.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
       case ExpirePayment => {
         context.log.warn("Your payment wasn't updated for ${paymentTimerDuration} and it expired.")
         timer.cancel()
+
+        cartActor ! TypedCartActor.ConfirmCheckoutCancelled
+
         cancelled
       }
     }
   )
 
-  def cancelled: Behavior[TypedCheckout.Command] = Behaviors.receive(
-    (_, _) => {
-      Behaviors.same
-    }
-  )
+  def cancelled: Behavior[TypedCheckout.Command] = Behaviors.stopped
 
-  def closed: Behavior[TypedCheckout.Command] = Behaviors.receive(
-    (_, _) => {
-      Behaviors.same
-    }
-  )
+  def closed: Behavior[TypedCheckout.Command] = Behaviors.stopped
 
 }

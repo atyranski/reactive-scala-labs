@@ -1,6 +1,6 @@
 package EShop.lab3
 
-import EShop.lab2.{TypedCartActor, TypedCheckout}
+import EShop.lab2.{Cart, TypedCartActor, TypedCheckout}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 
@@ -24,25 +24,121 @@ class OrderManager {
 
   import OrderManager._
 
-  def start: Behavior[OrderManager.Command] = ???
+  def start: Behavior[OrderManager.Command] = {
+    Behaviors.setup { context =>
+      val cartActor = context.spawn(new TypedCartActor().empty, "cartActor")
 
-  def uninitialized: Behavior[OrderManager.Command] = ???
+      open(cartActor)
+    }
+  }
 
-  def open(cartActor: ActorRef[TypedCartActor.Command]): Behavior[OrderManager.Command] = ???
+  def uninitialized: Behavior[OrderManager.Command] = start
+
+  def open(
+    cartActor: ActorRef[TypedCartActor.Command]
+  ): Behavior[OrderManager.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case AddItem(id, sender) => {
+        context.log.info(s"Received request to add item (id='${id}').")
+
+        cartActor ! TypedCartActor.AddItem(id)
+        sender ! Done
+
+        Behaviors.same
+      }
+      case RemoveItem(id, sender) => {
+        context.log.info(s"Received request to remove item (id='${id}').")
+
+        cartActor ! TypedCartActor.AddItem(id)
+        sender ! Done
+
+        Behaviors.same
+      }
+      case Buy(sender) => {
+        context.log.info(s"Received request to start checkout.")
+
+        cartActor ! TypedCartActor.StartCheckout(context.self)
+
+        inCheckout(cartActor, sender)
+      }
+    }
+  )
 
   def inCheckout(
     cartActorRef: ActorRef[TypedCartActor.Command],
     senderRef: ActorRef[Ack]
-  ): Behavior[OrderManager.Command] = ???
+  ): Behavior[OrderManager.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case ConfirmCheckoutStarted(checkoutRef: ActorRef[TypedCheckout.Command]) => {
+        context.log.info("Received request to confirm that checkout has been started.")
 
-  def inCheckout(checkoutActorRef: ActorRef[TypedCheckout.Command]): Behavior[OrderManager.Command] = ???
+        cartActorRef ! TypedCartActor.StartCheckout(context.self)
+        senderRef ! Done
 
-  def inPayment(senderRef: ActorRef[Ack]): Behavior[OrderManager.Command] = ???
+        inCheckout(checkoutRef)
+      }
+    }
+  )
+
+  def inCheckout(
+    checkoutActorRef: ActorRef[TypedCheckout.Command]
+  ): Behavior[OrderManager.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case SelectDeliveryAndPaymentMethod(delivery: String, payment: String, sender: ActorRef[Ack]) => {
+        context.log.info(s"Received request with delivery and payment selection: {'delivery':'${delivery}', 'payment':'${payment}'}")
+
+        checkoutActorRef ! TypedCheckout.SelectDeliveryMethod(delivery)
+        checkoutActorRef ! TypedCheckout.SelectPayment(payment, context.self)
+
+        inPayment(sender)
+      }
+    }
+  )
+
+  def inPayment(
+   senderRef: ActorRef[Ack]
+  ): Behavior[OrderManager.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case ConfirmPaymentStarted(paymentRef) => {
+        context.log.info("Received request to confirm that payment has been started.")
+
+        senderRef ! Done
+
+        inPayment(paymentRef, senderRef)
+      }
+      case ConfirmPaymentReceived => {
+        context.log.info("Received request to confirm that payment has been received.")
+
+        senderRef ! Done
+
+        finished
+      }
+      case _ => {
+        Behaviors.same
+      }
+    }
+  )
 
   def inPayment(
     paymentActorRef: ActorRef[Payment.Command],
     senderRef: ActorRef[Ack]
-  ): Behavior[OrderManager.Command] = ???
+  ): Behavior[OrderManager.Command] = Behaviors.receive(
+    (context, message) => message match {
+      case Pay(sender) => {
+        context.log.info("Received payment request.")
 
-  def finished: Behavior[OrderManager.Command] = ???
+        paymentActorRef ! Payment.DoPayment
+
+        sender ! Done
+
+        inPayment(sender)
+      }
+    }
+  )
+
+  def finished: Behavior[OrderManager.Command] = Behaviors.receive(
+    (_, _) => {
+      Behaviors.stopped
+    }
+  )
 }

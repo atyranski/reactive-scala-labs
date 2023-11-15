@@ -19,7 +19,8 @@ object TypedCartActor {
   case class GetItems(sender: ActorRef[Cart])                               extends Command // command made to make testing easier
 
   sealed trait Event
-  case class CheckoutStarted(checkoutRef: ActorRef[TypedCheckout.Command]) extends Event
+  case class CheckoutStarted(checkoutRef: ActorRef[TypedCheckout.Command])  extends Event
+  case class ItemAdded(id: String)                                          extends Event
 }
 
 class TypedCartActor {
@@ -37,6 +38,10 @@ class TypedCartActor {
     (context, message) => message match {
       case AddItem(item: Any) => {
         nonEmpty(Cart(Seq(item)), scheduleTimer(context))
+      }
+      case GetItems(sender) => {
+        sender ! Cart(Seq())
+        Behaviors.same
       }
     }
   )
@@ -63,10 +68,19 @@ class TypedCartActor {
         timer.cancel()
         empty
       }
-      case StartCheckout if cart.size > 0 => {
-        context.log.info("Starting checkout.")
+      case StartCheckout(orderManagerRef) if cart.size > 0 => {
+        context.log.info("Starting checkout...")
         timer.cancel()
+
+        val checkoutActor = context.spawn(new TypedCheckout(context.self).start, "checkoutActor")
+        checkoutActor ! TypedCheckout.StartCheckout
+        orderManagerRef ! OrderManager.ConfirmCheckoutStarted(checkoutActor)
+
         inCheckout(cart)
+      }
+      case GetItems(sender) => {
+        sender ! cart
+        Behaviors.same
       }
     }
   )
@@ -78,6 +92,9 @@ class TypedCartActor {
       }
       case ConfirmCheckoutClosed => {
         empty
+      }
+      case _ => {
+        Behaviors.same
       }
     }
   )
