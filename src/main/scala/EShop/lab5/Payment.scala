@@ -30,12 +30,34 @@ object Payment {
       .receive[Message](
         (context, msg) =>
           msg match {
-            case DoPayment                                       => ???
-            case WrappedPaymentServiceResponse(PaymentSucceeded) => ???
+            case DoPayment                                       => {
+              context.log.info(s"Processing payment request of methpd '${method}''")
+
+              val paymentAdapter = context.messageAdapter[PaymentService.Response](WrappedPaymentServiceResponse.apply)
+
+              val paymentService = context.spawnAnonymous(Behaviors.supervise(PaymentService(method, paymentAdapter))
+                .onFailure(restartStrategy))
+
+              context.watch(paymentService)
+
+              Behaviors.same
+            }
+            case WrappedPaymentServiceResponse(PaymentSucceeded) => {
+              context.log.info("Payment has been finalized. Closing Payment process")
+
+              notifyAboutPaymentConfirmation(orderManager, checkout)
+
+              Behaviors.stopped
+            }
         }
       )
       .receiveSignal {
-        case (context, Terminated(t)) => ???
+        case (context, Terminated(t)) => {
+          context.log.warn(s"Received rejection signal: ${t.toString}")
+          notifyAboutRejection(orderManager, checkout)
+
+          Behaviors.stopped
+        }
       }
 
   // please use this one to notify when supervised actor was stoped
@@ -45,6 +67,14 @@ object Payment {
   ): Unit = {
     orderManager ! OrderManager.PaymentRejected
     checkout ! TypedCheckout.PaymentRejected
+  }
+
+  private def notifyAboutPaymentConfirmation(
+    orderManager: ActorRef[OrderManager.Command],
+    checkout: ActorRef[TypedCheckout.Command]
+  ): Unit = {
+    orderManager ! OrderManager.ConfirmPaymentReceived
+    checkout ! TypedCheckout.ConfirmPaymentReceived
   }
 
 }
